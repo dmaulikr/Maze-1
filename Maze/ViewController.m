@@ -41,7 +41,7 @@
     
     // define the start and end points of the animation for ghost2
     CGPoint origin2 = self.ghost2.center;
-    CGPoint target2 = CGPointMake(self.ghost2.center.x, self.ghost2.center.y-284);
+    CGPoint target2 = CGPointMake(self.ghost2.center.x, self.ghost2.center.y+284);
     
     CABasicAnimation *bounce2 = [CABasicAnimation animationWithKeyPath:@"position.y"];
     bounce2.fromValue = [NSNumber numberWithInt:origin2.y];
@@ -54,7 +54,7 @@
     
     // define the start and end points of the animation for ghost3
     CGPoint origin3 = self.ghost3.center;
-    CGPoint target3 = CGPointMake(self.ghost3.center.x, self.ghost3.center.y+284);
+    CGPoint target3 = CGPointMake(self.ghost3.center.x, self.ghost3.center.y-284);
     
     CABasicAnimation *bounce3 = [CABasicAnimation animationWithKeyPath:@"position.y"];
     bounce3.fromValue = [NSNumber numberWithInt:origin3.y];
@@ -64,8 +64,71 @@
     bounce3.repeatCount = HUGE_VALF;
     
     [self.ghost3.layer addAnimation:bounce3 forKey:@"position"];
+    
+    
+    // movement of pacman
+    self.lastUpdateTime = [[NSDate alloc] init];
+    
+    self.currentPoint = CGPointMake(0, 144);
+    self.motionManager = [[CMMotionManager alloc] init];
+    self.queue = [[NSOperationQueue alloc] init];
+    
+    self.motionManager.accelerometerUpdateInterval = kUpdateInterval;
+    
+    // start accelerometer updates using block to save acceleration data and then call the update method
+    [self.motionManager startAccelerometerUpdatesToQueue:self.queue withHandler:^(CMAccelerometerData *accelerometerData, NSError *error) {
+        [(id) self setAcceleration:accelerometerData.acceleration];
+        [self performSelectorOnMainThread:@selector(update) withObject:nil waitUntilDone:NO];
+    }];
+    
 }
 
+// compute the new position of pacman
+- (void)update {
+    
+    NSTimeInterval secondsSinceLastDraw = -([self.lastUpdateTime timeIntervalSinceNow]);
+    
+    // pacman's new velocity vector depends on the previous velocity vector, the current accelerator vector (from the accelerometer) and the time elapsed since the last calculation
+    self.pacmanYVelocity = self.pacmanYVelocity - (self.acceleration.x * secondsSinceLastDraw);
+    self.pacmanXVelocity = self.pacmanXVelocity - (self.acceleration.y * secondsSinceLastDraw);
+    
+    // compute a delta vector with the change to be applied to pacman's current position, based on the time elapsed, the recalculated velocity, and a scaling factor of 500
+    CGFloat xDelta = secondsSinceLastDraw * self.pacmanXVelocity * 500;
+    CGFloat yDelta = secondsSinceLastDraw * self.pacmanYVelocity * 500;
+    
+    self.currentPoint = CGPointMake(self.currentPoint.x + xDelta, self.currentPoint.y + yDelta);
+    
+    // tell pacman to move to his new position by invoking the movePacman method
+    [self movePacman];
+    
+    self.lastUpdateTime = [NSDate date];
+}
+
+// change the frame where pacman draws to its new position
+- (void)movePacman {
+    self.previousPoint = self.currentPoint;
+    
+    CGRect frame = self.pacman.frame;
+    frame.origin.x = self.currentPoint.x;
+    frame.origin.y = self.currentPoint.y;
+    
+    self.pacman.frame = frame;
+    
+    // rotate the sprite by applying the old angle to the new one
+    CGFloat newAngle = (self.pacmanXVelocity + self.pacmanYVelocity) * M_PI * 4;
+    self.angle += newAngle * kUpdateInterval;
+    
+    // create a CABasicAnimation object which will be applied to the rotation of pacman
+    CABasicAnimation *rotate;
+    rotate = [CABasicAnimation animationWithKeyPath:@"transform.rotation"];
+    rotate.fromValue = [NSNumber numberWithFloat:0];
+    rotate.toValue = [NSNumber numberWithFloat:self.angle];
+    rotate.duration = kUpdateInterval;
+    rotate.repeatCount = 1;
+    rotate.removedOnCompletion = NO;
+    rotate.fillMode = kCAFillModeForwards;
+    [self.pacman.layer addAnimation:rotate forKey:@"10"];
+}
 
 - (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
